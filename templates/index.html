@@ -143,7 +143,7 @@
                 reader.onloadend = () => {
                     socket.emit('send_voicenote', { sender: myName, target: target, audio: reader.result });
                 }
-                stream.getTracks().forEach(track => track.stop()); // Turn off mic
+                stream.getTracks().forEach(track => track.stop());
             };
 
             mediaRecorder.start();
@@ -237,6 +237,12 @@
     // --- SYSTEM & MESSAGES ---
     socket.on('system_msg', function(data) { logToChat(`<span class="system">${data.text}</span>`); });
     socket.on('receive_message', function(data) { logToChat(`<span class="incoming">[${data.sender}]:</span> ${data.text}`); });
+    
+    // --- AUTO-SWITCH TARGET SYSTEM ---
+    socket.on('auto_switch_target', function(data) {
+        document.getElementById("targetUser").value = data.agent_name;
+        logToChat(`<span class="system">🔄 Auto-Target activated: Your messages will now be sent directly to ${data.agent_name}.</span>`);
+    });
 </script>
 
 </body>
