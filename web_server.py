@@ -58,8 +58,13 @@ def handle_message(data):
             if agent_list:
                 target_agent = random.choice(agent_list)
                 agent_sid = active_users[target_agent]['sid']
+                
+                # Notify the agent
                 emit('receive_message', {'sender': 'SYSTEM (Escalation)', 'text': f'Customer [{sender}] requested human assistance for: "{text}"'}, to=agent_sid)
-                emit('system_msg', {'text': f'🤖 BOT: You are now connected to {target_agent}. Please change your Target to: {target_agent}'}, to=request.sid)
+                
+                # Notify the customer and trigger auto-switch target
+                emit('system_msg', {'text': f'🤖 BOT: You are now connected to {target_agent}.'}, to=request.sid)
+                emit('auto_switch_target', {'agent_name': target_agent}, to=request.sid)
             else:
                 emit('receive_message', {'sender': 'BOT', 'text': '🤖 Sorry, no agents are currently available. Please try again later.'}, to=request.sid)
         
