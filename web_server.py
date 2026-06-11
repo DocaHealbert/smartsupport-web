@@ -7,7 +7,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'smartsupport_secret'
 socketio = SocketIO(app, max_http_buffer_size=10000000)
 
-# active_users = { username: { 'sid': request.sid, 'role': 'agent', 'in_call': False } }
 active_users = {}
 
 @app.route('/')
@@ -18,12 +17,10 @@ def index():
 def handle_login(data):
     username = data['username'].strip()
     role = data['role']
-
     if not username:
         emit('system_msg', {'text': '❌ Username cannot be empty.'}, to=request.sid)
         return
 
-    # Initialize user with 'in_call' status set to False
     active_users[username] = {'sid': request.sid, 'role': role, 'in_call': False}
     emit('login_response', {'success': True, 'username': username, 'role': role}, to=request.sid)
     print(f"[LOGIN] {username} logged in as {role.upper()}.")
@@ -35,7 +32,6 @@ def handle_disconnect():
         if info['sid'] == request.sid:
             user_to_remove = username
             break
-            
     if user_to_remove:
         del active_users[user_to_remove]
         print(f"[DISCONNECT] {user_to_remove} has left the system.")
@@ -46,91 +42,48 @@ def handle_message(data):
     target = data['target'].strip()
     text = data['text']
 
-    # --- ADVANCED BOT FAQ & AUTOMATION LOGIC ---
     if target.upper() == "BOT":
         text_lower = text.lower()
-        
-        # 1. Escalation to Human Agent
-        if "agent" in text_lower or "human" in text_lower or "help" in text_lower:
+        if any(word in text_lower for word in ["agent", "human", "help"]):
             emit('receive_message', {'sender': 'BOT', 'text': '🤖 Connecting you to a human agent...'}, to=request.sid)
             agent_list = [user for user, info in active_users.items() if info['role'] == 'agent']
-            
             if agent_list:
                 target_agent = random.choice(agent_list)
-                agent_sid = active_users[target_agent]['sid']
-                
-                # Notify the agent
-                emit('receive_message', {'sender': 'SYSTEM (Escalation)', 'text': f'Customer [{sender}] requested human assistance for: "{text}"'}, to=agent_sid)
-                
-                # Notify the customer and trigger auto-switch target
+                emit('receive_message', {'sender': 'SYSTEM', 'text': f'Customer [{sender}] needs help with: "{text}"'}, to=active_users[target_agent]['sid'])
                 emit('system_msg', {'text': f'🤖 BOT: You are now connected to {target_agent}.'}, to=request.sid)
                 emit('auto_switch_target', {'agent_name': target_agent}, to=request.sid)
             else:
-                emit('receive_message', {'sender': 'BOT', 'text': '🤖 Sorry, no agents are currently available. Please try again later.'}, to=request.sid)
-        
-        # 2. FAQ: Operating Hours
-        elif "hour" in text_lower or "time" in text_lower or "open" in text_lower:
-            reply = "🤖 Our operating hours are Monday to Friday, 9:00 AM to 6:00 PM. We are closed on weekends and public holidays."
-            emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
-            
-        # 3. FAQ: Location / Address
-        elif "location" in text_lower or "where" in text_lower or "address" in text_lower:
-            reply = "🤖 We are located at Lot 123, Ground Floor, Jalan Ampang, 50450 Kuala Lumpur, Malaysia."
-            emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
-            
-        # 4. FAQ: Pricing / Service Cost
-        elif "price" in text_lower or "cost" in text_lower or "fee" in text_lower:
-            reply = "🤖 Our basic vehicle inspection fee starts from RM50. Standard servicing ranges from RM150 to RM350 depending on your engine oil package."
-            emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
-            
-        # 5. Default Response
+                emit('receive_message', {'sender': 'BOT', 'text': '🤖 No agents available. Try again later.'}, to=request.sid)
+        elif any(word in text_lower for word in ["hour", "time", "open"]):
+            emit('receive_message', {'sender': 'BOT', 'text': '🤖 We are open Mon-Fri, 9AM - 6PM.'}, to=request.sid)
+        elif any(word in text_lower for word in ["location", "where"]):
+            emit('receive_message', {'sender': 'BOT', 'text': '🤖 We are located in Kuala Lumpur, Malaysia.'}, to=request.sid)
         else:
-            reply = "🤖 I am the SmartSupport Assistant. You can ask me about our 'hours', 'location', or 'pricing'. Type 'agent' if you need to speak with a human."
-            emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
+            emit('receive_message', {'sender': 'BOT', 'text': '🤖 I am SmartSupport Bot. Ask about hours, location, or type "agent".'}, to=request.sid)
         return
 
-    # --- NORMAL CHAT (CUSTOMER <-> AGENT) ---
     target_info = active_users.get(target)
     if target_info:
         emit('receive_message', {'sender': sender, 'text': text}, to=target_info['sid'])
-        emit('system_msg', {'text': f'Message sent to {target}.'}, to=request.sid)
     else:
-        emit('system_msg', {'text': f'❌ User {target} is currently offline.'}, to=request.sid)
+        emit('system_msg', {'text': f'❌ {target} is offline.'}, to=request.sid)
 
-# --- VOICE NOTE FUNCTION ---
 @socketio.on('send_voicenote')
 def handle_voicenote(data):
-    sender = data['sender']
-    target = data['target']
-    audio_data = data['audio']
-
-    target_info = active_users.get(target)
+    target_info = active_users.get(data['target'])
     if target_info:
-        emit('receive_voicenote', {'sender': sender, 'audio': audio_data}, to=target_info['sid'])
-        emit('system_msg', {'text': f'✅ Voice Note sent to {target}.'}, to=request.sid)
-    else:
-        emit('system_msg', {'text': f'❌ User {target} is offline. Voice Note failed.'}, to=request.sid)
+        emit('receive_voicenote', {'sender': data['sender'], 'audio': data['audio']}, to=target_info['sid'])
 
-# --- WEBRTC SIGNALING (LIVE CALL WITH BUSY STATUS) ---
 @socketio.on('call_user')
 def call_user(data):
-    caller = data['caller']
-    target = data['target']
-    offer = data['offer']
-    
-    target_info = active_users.get(target)
-    
+    target_info = active_users.get(data['target'])
     if target_info:
-        # Check if the target is already in a call
-        if target_info.get('in_call') == True:
-            emit('system_msg', {'text': f'⚠️ {target} is currently on another call. Please try again later.'}, to=request.sid)
+        if target_info.get('in_call'):
+            emit('system_msg', {'text': f'⚠️ {data["target"]} is busy.'}, to=request.sid)
         else:
-            # Lock both users into 'in_call' status
-            active_users[caller]['in_call'] = True
-            active_users[target]['in_call'] = True
-            emit('incoming_call', {'caller': caller, 'offer': offer}, to=target_info['sid'])
-    else:
-        emit('system_msg', {'text': f'❌ Call failed. {target} is offline.'}, to=request.sid)
+            active_users[data['caller']]['in_call'] = True
+            active_users[data['target']]['in_call'] = True
+            emit('incoming_call', {'caller': data['caller'], 'offer': data['offer']}, to=target_info['sid'])
 
 @socketio.on('answer_call')
 def answer_call(data):
@@ -146,19 +99,11 @@ def handle_ice(data):
 
 @socketio.on('end_call')
 def end_call(data):
-    caller = data['caller']
-    target = data['target']
-    
-    # Release the 'in_call' status for both users
-    if caller in active_users:
-        active_users[caller]['in_call'] = False
-    if target in active_users:
-        active_users[target]['in_call'] = False
-
-    target_info = active_users.get(target)
+    if data['caller'] in active_users: active_users[data['caller']]['in_call'] = False
+    if data['target'] in active_users: active_users[data['target']]['in_call'] = False
+    target_info = active_users.get(data['target'])
     if target_info:
-        emit('call_ended', {'sender': caller}, to=target_info['sid'])
+        emit('call_ended', {'sender': data['caller']}, to=target_info['sid'])
 
 if __name__ == '__main__':
-    print("[STARTING] SmartSupport Web Server running on http://127.0.0.1:5000")
     socketio.run(app, debug=True, port=5000)
