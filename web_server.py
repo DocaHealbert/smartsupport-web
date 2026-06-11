@@ -7,7 +7,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'smartsupport_secret'
 socketio = SocketIO(app, max_http_buffer_size=10000000)
 
-# active_users = { username: { 'sid': request.sid, 'role': 'agent', 'in_call': False, 'current_peer': None } }
+# active_users = { username: { 'sid': request.sid, 'role': 'agent', 'in_call': False, 'current_peer': None, 'missed_calls': [] } }
 active_users = {}
 
 @app.route('/')
@@ -22,8 +22,14 @@ def handle_login(data):
         emit('system_msg', {'text': '❌ Username cannot be empty.'}, to=request.sid)
         return
 
-    # Track tracking states globally
-    active_users[username] = {'sid': request.sid, 'role': role, 'in_call': False, 'current_peer': None}
+    # Added 'missed_calls' array to track blocked queue attempts
+    active_users[username] = {
+        'sid': request.sid, 
+        'role': role, 
+        'in_call': False, 
+        'current_peer': None,
+        'missed_calls': []
+    }
     emit('login_response', {'success': True, 'username': username, 'role': role}, to=request.sid)
     print(f"[LOGIN] {username} logged in as {role.upper()}.")
 
@@ -36,13 +42,20 @@ def handle_disconnect():
             break
             
     if user_to_remove:
-        # If user drops during an active call, automatically free the other peer
         peer = active_users[user_to_remove].get('current_peer')
         if peer and peer in active_users:
             active_users[peer]['in_call'] = False
             active_users[peer]['current_peer'] = None
             emit('call_ended', {'sender': user_to_remove}, to=active_users[peer]['sid'])
-            emit('system_msg', {'text': f'⚠️ Call dropped because {user_to_remove} disconnected. You are now available.'}, to=active_users[peer]['sid'])
+            
+            # Check if the surviving peer has pending missed calls to notify
+            missed = active_users[peer].get('missed_calls', [])
+            if missed:
+                customers = ", ".join(missed)
+                emit('system_msg', {'text': f'🔔 Call dropped. Note: You missed calls from {customers} while busy.'}, to=active_users[peer]['sid'])
+                active_users[peer]['missed_calls'] = []
+            else:
+                emit('system_msg', {'text': f'⚠️ Call dropped because {user_to_remove} disconnected. You are now available.'}, to=active_users[peer]['sid'])
             
         del active_users[user_to_remove]
         print(f"[DISCONNECT] {user_to_remove} has left the system.")
@@ -85,7 +98,7 @@ def handle_voicenote(data):
     if target_info:
         emit('receive_voicenote', {'sender': data['sender'], 'audio': data['audio']}, to=target_info['sid'])
 
-# --- WEBRTC SIGNALING WITH SERVER-SIDE TRACKING ---
+# --- WEBRTC SIGNALING WITH MISSED CALL TRACKING ---
 @socketio.on('call_user')
 def call_user(data):
     caller = data['caller']
@@ -93,15 +106,16 @@ def call_user(data):
     target_info = active_users.get(target)
     
     if target_info:
+        # If agent is busy, silently log the customer's name into the agent's log
         if target_info.get('in_call') == True:
+            if caller not in target_info['missed_calls']:
+                target_info['missed_calls'].append(caller)
             emit('system_msg', {'text': f'⚠️ {target} is currently busy on another call.'}, to=request.sid)
         else:
-            # Bind session data on server to prevent synchronization bugs
             active_users[caller]['in_call'] = True
             active_users[caller]['current_peer'] = target
             active_users[target]['in_call'] = True
             active_users[target]['current_peer'] = caller
-            
             emit('incoming_call', {'caller': caller, 'offer': data['offer']}, to=target_info['sid'])
     else:
         emit('system_msg', {'text': f'❌ {target} is offline.'}, to=request.sid)
@@ -121,21 +135,32 @@ def handle_ice(data):
 @socketio.on('end_call')
 def end_call(data):
     caller = data['caller']
-    # Look up peer directly from backend memory cache
     peer = active_users.get(caller, {}).get('current_peer')
     
-    # Reset caller's line state
-    if caller in active_users:
-        active_users[caller]['in_call'] = False
-        active_users[caller]['current_peer'] = None
-        emit('system_msg', {'text': 'ℹ️ Call ended. You are now available.'}, to=request.sid)
+    # Internal sub-function to clear line status and check missed logs
+    def reset_line_and_check_missed(user_id, sid):
+        if user_id in active_users:
+            active_users[user_id]['in_call'] = False
+            active_users[user_id]['current_peer'] = None
+            
+            # Extract and compile missed call array strings
+            missed = active_users[user_id].get('missed_calls', [])
+            if missed:
+                customers = ", ".join(missed)
+                emit('system_msg', {'text': f'🔔 Missed calls while you were busy: {customers}'}, to=sid)
+                active_users[user_id]['missed_calls'] = [] # Reset log
+            else:
+                emit('system_msg', {'text': 'ℹ️ Call ended. You are now available.'}, to=sid)
+
+    # Process status reset for caller
+    reset_line_and_check_missed(caller, request.sid)
         
-    # Reset target peer's line state automatically
+    # Process status reset for peer target automatically
     if peer and peer in active_users:
         active_users[peer]['in_call'] = False
         active_users[peer]['current_peer'] = None
         emit('call_ended', {'sender': caller}, to=active_users[peer]['sid'])
-        emit('system_msg', {'text': f'ℹ️ Call ended by {caller}. You are now available.'}, to=active_users[peer]['sid'])
+        reset_line_and_check_missed(peer, active_users[peer]['sid'])
 
 if __name__ == '__main__':
     socketio.run(app, debug=True, port=5000)
