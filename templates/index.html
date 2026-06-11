@@ -7,72 +7,69 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 90vh; }
-        .container { width: 100%; max-width: 650px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 15px rgba(0,0,0,0.1); }
+        .container { width: 100%; max-width: 700px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 15px rgba(0,0,0,0.1); }
         
-        /* --- Gaya Skrin Log Masuk --- */
         .login-card { text-align: center; padding: 20px; }
         .form-group { margin-bottom: 15px; text-align: left; }
         .form-group label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
         .form-group input, .form-group select { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; }
         
-        /* --- Gaya Utama Dashboard --- */
-        .dashboard { display: none; } /* Tersembunyi pada mulanya */
+        .dashboard { display: none; }
         .chat-header { padding: 10px; border-radius: 6px; color: white; margin-bottom: 15px; font-weight: bold; text-align: center; }
-        .role-agent { background-color: #2E7D32; }     /* Tema Hijau untuk Ejen */
-        .role-customer { background-color: #1565C0; }  /* Tema Biru untuk Pelanggan */
+        .role-agent { background-color: #2E7D32; }
+        .role-customer { background-color: #1565C0; }
         
         .chat-box { height: 350px; border: 1px solid #ddd; background: #fafafa; overflow-y: auto; padding: 12px; margin-bottom: 15px; border-radius: 6px; }
         .msg { margin-bottom: 10px; padding: 6px; border-bottom: 1px solid #eee; font-size: 15px; }
         .system { color: #757575; font-style: italic; font-size: 13px; }
         .incoming { color: #1565C0; font-weight: bold; }
-        .controls { display: flex; gap: 10px; flex-wrap: wrap; }
+        .controls { display: flex; gap: 8px; flex-wrap: wrap; }
         .controls input[type="text"] { flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc; }
         
-        button { padding: 10px 18px; border-radius: 6px; border: none; font-size: 15px; font-weight: bold; color: white; cursor: pointer; transition: 0.2s; }
+        button { padding: 10px 14px; border-radius: 6px; border: none; font-size: 14px; font-weight: bold; color: white; cursor: pointer; transition: 0.2s; }
         .btn-login { background-color: #4CAF50; width: 100%; margin-top: 10px; padding: 12px; }
         .btn-send { background-color: #2196F3; }
-        .btn-call { background-color: #E53935; }
+        .btn-voice { background-color: #FF9800; }
+        .btn-call { background-color: #4CAF50; }
+        .btn-end { background-color: #E53935; }
         button:hover { opacity: 0.9; }
         audio { display: none; }
+        .voice-audio { display: block; height: 40px; margin-top: 5px; outline: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    
     <div id="loginScreen" class="login-card">
         <h2>SmartSupport Portal 🌐</h2>
-        <p style="color: #666;">Sila log masuk untuk memulakan sesi bantuan</p>
-        
+        <p style="color: #666;">Please login to start</p>
         <div class="form-group">
-            <label>Nama Pengguna (Username):</label>
-            <input type="text" id="usernameInput" placeholder="Masukkan nama anda (cth: Danial)" onkeypress="if(event.key === 'Enter') performLogin()">
+            <label>Username:</label>
+            <input type="text" id="usernameInput" placeholder="Enter your name (e.g., Danial)" onkeypress="if(event.key === 'Enter') performLogin()">
         </div>
-        
         <div class="form-group">
-            <label>Daftar Sebagai (Role):</label>
+            <label>Role:</label>
             <select id="roleInput">
-                <option value="customer">Pelanggan (Customer)</option>
-                <option value="agent">Ejen Sokongan (Agent)</option>
+                <option value="customer">Customer</option>
+                <option value="agent">Support Agent</option>
             </select>
         </div>
-        
-        <button class="btn-login" onclick="performLogin()">Masuk Ke Sistem</button>
+        <button class="btn-login" onclick="performLogin()">Login</button>
     </div>
 
     <div id="dashboardScreen" class="dashboard">
-        <div id="headerTag" class="chat-header">Menu Utama</div>
-        
+        <div id="headerTag" class="chat-header">Main Menu</div>
         <div class="chat-box" id="chatBox"></div>
 
         <div class="controls">
-            <input type="text" id="targetUser" placeholder="Hantar ke (cth: BOT / Agent1)" style="width: 140px;">
-            <input type="text" id="msgText" placeholder="Taip mesej anda..." onkeypress="if(event.key === 'Enter') sendMessage()">
-            <button class="btn-send" onclick="sendMessage()">Hantar</button>
+            <input type="text" id="targetUser" placeholder="Target (e.g., BOT)" style="width: 120px;">
+            <input type="text" id="msgText" placeholder="Type a message..." onkeypress="if(event.key === 'Enter') sendMessage()">
+            <button class="btn-send" onclick="sendMessage()">Send</button>
+            <button class="btn-voice" onclick="sendVoiceNote()">🎤 Voice Note</button>
             <button class="btn-call" onclick="startLiveCall()">📞 Call</button>
+            <button class="btn-end" onclick="endCall()">📵 End Call</button>
         </div>
     </div>
-    
     <audio id="remoteAudio" autoplay></audio>
 </div>
 
@@ -90,45 +87,31 @@
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // Pemicu fungsi Log Masuk
     function performLogin() {
-        // PERHATIAN: Ini baris yang telah dibaiki (.trim() digunakan di sini)
         const user = document.getElementById("usernameInput").value.trim();
         const role = document.getElementById("roleInput").value;
-        
-        if(!user) {
-            alert("Sila masukkan Nama Pengguna!");
-            return;
-        }
-        
-        // Hantar permintaan log masuk ke server
+        if(!user) return alert("Please enter a Username!");
         socket.emit('login', { username: user, role: role });
     }
 
-    // Menerima maklum balas log masuk daripada server
     socket.on('login_response', function(data) {
         if(data.success) {
             myName = data.username;
             myRole = data.role;
-            
-            // Sembunyikan kad log masuk, paparkan dashboard
             document.getElementById("loginScreen").style.display = "none";
-            const dBoard = document.getElementById("dashboardScreen");
-            dBoard.style.display = "block";
+            document.getElementById("dashboardScreen").style.display = "block";
             
-            // Ubah suai tema warna berdasarkan peranan (Role)
             const header = document.getElementById("headerTag");
             if(myRole === "agent") {
                 header.className = "chat-header role-agent";
-                header.innerText = `🎧 PAPARAN EJEN: ${myName}`;
-                document.getElementById("targetUser").value = "Customer1"; // Cadangan target untuk ejen
+                header.innerText = `🎧 AGENT DASHBOARD: ${myName}`;
+                document.getElementById("targetUser").value = "Customer1";
             } else {
                 header.className = "chat-header role-customer";
-                header.innerText = `🚗 PAPARAN PELANGGAN: ${myName}`;
-                document.getElementById("targetUser").value = "BOT"; // Cadangan target untuk pelanggan
+                header.innerText = `🚗 CUSTOMER DASHBOARD: ${myName}`;
+                document.getElementById("targetUser").value = "BOT";
             }
-            
-            logToChat(`<span class="system">Selamat datang, anda telah aktif di dalam rangkaian.</span>`);
+            logToChat(`<span class="system">Welcome, you are now connected to the network.</span>`);
         }
     });
 
@@ -137,19 +120,58 @@
         const text = document.getElementById("msgText").value.trim();
         if(myName && target && text) {
             socket.emit('send_message', { sender: myName, target: target, text: text });
-            logToChat(`<b>[Saya -> ${target}]:</b> ${text}`);
+            logToChat(`<b>[Me -> ${target}]:</b> ${text}`);
             document.getElementById("msgText").value = ""; 
         }
     }
 
-    // --- ENJIN WEBRTC LIVE CALL ---
+    // --- VOICE NOTE FUNCTION ---
+    async function sendVoiceNote() {
+        const target = document.getElementById("targetUser").value.trim();
+        if(!target || target.toUpperCase() === "BOT") return alert("Please specify a valid human target for Voice Notes.");
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            const audioChunks = [];
+
+            mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = () => {
+                    socket.emit('send_voicenote', { sender: myName, target: target, audio: reader.result });
+                }
+                stream.getTracks().forEach(track => track.stop()); // Turn off mic
+            };
+
+            mediaRecorder.start();
+            logToChat(`<span class="system">🔴 Recording (5s)... Speak now!</span>`);
+            setTimeout(() => {
+                mediaRecorder.stop();
+                logToChat(`<span class="system">⏳ Recording finished. Sending...</span>`);
+            }, 5000);
+        } catch (err) {
+            alert("Microphone Error: Please allow microphone access. " + err);
+        }
+    }
+
+    socket.on('receive_voicenote', function(data) {
+        const audioHtml = `<br><audio class="voice-audio" controls src="${data.audio}"></audio>`;
+        logToChat(`<span class="incoming">🎵 [Voice Note from ${data.sender}]:</span> ${audioHtml}`);
+    });
+
+    // --- WEBRTC LIVE CALL ENGINE ---
     async function setupWebRTC(target) {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         peerConnection = new RTCPeerConnection(servers);
         localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+        
         peerConnection.ontrack = event => {
             document.getElementById("remoteAudio").srcObject = event.streams[0];
         };
+        
         peerConnection.onicecandidate = event => {
             if (event.candidate) {
                 socket.emit('ice_candidate', { target: target, candidate: event.candidate });
@@ -159,17 +181,31 @@
 
     async function startLiveCall() {
         const target = document.getElementById("targetUser").value.trim();
-        if(!target || target.toUpperCase() === "BOT") return alert("Sila masukkan target pengguna manusia yang sah untuk membuat panggilan.");
+        if(!target || target.toUpperCase() === "BOT") return alert("Please specify a human target to call.");
         
         await setupWebRTC(target);
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         socket.emit('call_user', { caller: myName, target: target, offer: offer });
-        logToChat(`<span class="system">📞 Memanggil ${target}...</span>`);
+        logToChat(`<span class="system">📞 Calling ${target}...</span>`);
+    }
+
+    function endCall() {
+        const target = document.getElementById("targetUser").value.trim();
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+        socket.emit('end_call', { caller: myName, target: target });
+        logToChat(`<span class="system">📵 You ended the call.</span>`);
     }
 
     socket.on('incoming_call', async function(data) {
-        logToChat(`<span class="incoming">📞 Panggilan masuk daripada ${data.caller}. Menyambung suara secara automatik...</span>`);
+        logToChat(`<span class="incoming">📞 Incoming call from ${data.caller}. Connecting automatically...</span>`);
         await setupWebRTC(data.caller);
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await peerConnection.createAnswer();
@@ -179,14 +215,26 @@
 
     socket.on('call_answered', async function(data) {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-        logToChat(`<span class="system">🟢 Talian bersambung! Sila mula bercakap melalui mikrofon.</span>`);
+        logToChat(`<span class="system">🟢 Call connected! You can now speak.</span>`);
     });
 
     socket.on('ice_candidate', async function(data) {
         if(peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
     });
 
-    // --- MAKLUMAT CHAT MASUK ---
+    socket.on('call_ended', function(data) {
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+        logToChat(`<span class="system">📵 Call was ended by ${data.sender}.</span>`);
+    });
+
+    // --- SYSTEM & MESSAGES ---
     socket.on('system_msg', function(data) { logToChat(`<span class="system">${data.text}</span>`); });
     socket.on('receive_message', function(data) { logToChat(`<span class="incoming">[${data.sender}]:</span> ${data.text}`); });
 </script>
