@@ -2,27 +2,21 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartSupport Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         :root { --primary: #1565C0; --secondary: #2E7D32; --bg: #f0f2f5; --white: #ffffff; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; height: 100vh; align-items: center; justify-content: center; }
         
-        /* --- HALANG AUTO-ZOOM IPHONE SAFARI --- */
-        input[type="text"], select { font-size: 16px !important; }
-
-        /* Login Screen Styles */
-        .login-card { background: var(--white); padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; width: 350px; max-width: 90%; }
+        .login-card { background: var(--white); padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; width: 350px; }
         .login-card input, .login-card select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
         .btn-login { width: 100%; padding: 12px; background: var(--secondary); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
 
-        /* Main Dashboard Responsive Layout */
         .dashboard { display: none; width: 95%; max-width: 1100px; height: 85vh; background: var(--white); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); overflow: hidden; }
-        .main-wrapper { display: flex; height: 100%; width: 100%; }
+        .main-wrapper { display: flex; height: 100%; }
 
-        /* Sidebar Design */
-        .sidebar { width: 280px; border-right: 1px solid #ddd; background: #f8f9fa; display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar { width: 280px; border-right: 1px solid #ddd; background: #f8f9fa; display: flex; flex-direction: column; }
         .sidebar-header { padding: 20px; background: var(--primary); color: white; font-weight: bold; }
         .user-list { flex-grow: 1; overflow-y: auto; }
         .user-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; transition: 0.2s; position: relative; }
@@ -30,51 +24,24 @@
         .user-item.active { background: #d1e7ff; border-left: 5px solid var(--primary); }
         .unread-dot { position: absolute; right: 15px; top: 18px; width: 10px; height: 10px; background: red; border-radius: 50%; display: none; }
 
-        /* Chat Area Design */
-        .chat-area { flex-grow: 1; display: flex; flex-direction: column; background: #fff; min-width: 0; }
-        .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; background: #fff; display: flex; justify-content: space-between; align-items: center; font-weight: bold; gap: 10px; }
+        .chat-area { flex-grow: 1; display: flex; flex-direction: column; background: #fff; }
+        .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; background: #fff; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
         .chat-box { flex-grow: 1; padding: 20px; overflow-y: auto; background: #f9f9f9; }
-        .controls { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center; }
-        .controls input { flex-grow: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; min-width: 0; }
+        .controls { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        .controls input { flex-grow: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; }
 
-        /* Action Buttons */
-        button { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; }
+        button { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
         .btn-send { background: var(--primary); }
         .btn-voice { background: #FF9800; min-width: 65px; } 
         .btn-call { background: #4CAF50; }
         .btn-end { background: #f44336; }
-        #backBtn { background: #555; display: none; padding: 8px 12px; font-size: 13px; }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
         
-        /* Message Bubbles styling */
-        .msg { margin-bottom: 12px; max-width: 85%; padding: 10px; border-radius: 8px; font-size: 14px; word-wrap: break-word; }
+        .msg { margin-bottom: 12px; max-width: 80%; padding: 10px; border-radius: 8px; font-size: 14px; }
         .msg.sent { background: #e3f2fd; align-self: flex-end; margin-left: auto; }
         .msg.received { background: #fff; border: 1px solid #ddd; }
-        .system { color: #888; font-size: 12px; text-align: center; display: block; margin: 10px 0; width: 100%; }
-        audio { display: block; margin-top: 5px; height: 40px; max-width: 100%; outline: none; }
-
-        /* ==========================================================================
-           MEDIA QUERIES FOR MOBILE DEVICES (RESPONSIVE ENGINE)
-           ========================================================================== */
-        @media (max-width: 768px) {
-            body { padding: 0; background: #fff; }
-            .dashboard { width: 100%; height: 100vh; border-radius: 0; box-shadow: none; }
-            
-            /* Toggle behavior for agent workflow on tiny screens */
-            .sidebar { width: 100%; display: flex; }
-            .chat-area { width: 100%; display: none; }
-            
-            /* When view-chat state is active on dashboard wrapper */
-            .dashboard.view-chat .sidebar { display: none; }
-            .dashboard.view-chat .chat-area { display: flex; }
-            
-            /* Expose back tracking button for mobile agent workflow */
-            .dashboard.view-chat #backBtn { display: inline-flex; }
-            
-            .msg { max-width: 90%; }
-            .controls { padding: 10px; gap: 6px; }
-            button { padding: 10px 12px; }
-        }
+        .system { color: #888; font-size: 12px; text-align: center; display: block; margin: 10px 0; }
+        audio { display: block; margin-top: 5px; height: 40px; max-width: 220px; outline: none; }
     </style>
 </head>
 <body>
@@ -97,4 +64,293 @@
         </div>
         
         <div class="chat-area">
-            <div class
+            <div class="chat-header">
+                <span id="chatWith">Target: None</span>
+                <div id="callControls" style="display:none;">
+                    <button class="btn-call" id="callBtn" onclick="startLiveCall()">📞 Call</button>
+                    <button class="btn-end" id="endBtn" onclick="endCall()">📵 End</button>
+                </div>
+            </div>
+            <div class="chat-box" id="chatBox"></div>
+            <div class="controls" id="controls" style="display:none;">
+                <input type="text" id="msgText" placeholder="Type message..." onkeypress="if(event.key==='Enter') sendMessage()">
+                <button class="btn-send" onclick="sendMessage()">Send</button>
+                <button class="btn-voice" onclick="sendVoiceNote()">🎤</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<audio id="remoteAudio" autoplay></audio>
+
+<script>
+    const socket = io();
+    let myName = "", myRole = "", activeTarget = "";
+    let chatHistory = {}; 
+    let localStream, peerConnection;
+    let iceCandidateQueue = [];
+
+    function logToChat(htmlContent) {
+        const chatBox = document.getElementById("chatBox");
+        chatBox.innerHTML += htmlContent;
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function performLogin() {
+        const user = document.getElementById("usernameInput").value.trim();
+        const role = document.getElementById("roleInput").value;
+        if(user) socket.emit('login', { username: user, role: role });
+    }
+
+    socket.on('login_response', function(data) {
+        if(data.success) {
+            myName = data.username; myRole = data.role;
+            document.getElementById("loginScreen").style.display = "none";
+            document.getElementById("dashboardScreen").style.display = "block";
+            if(myRole === "customer") {
+                document.getElementById("sidebar").style.display = "none";
+                switchChat("BOT");
+            }
+        }
+    });
+
+    function switchChat(target) {
+        activeTarget = target;
+        document.getElementById("chatWith").innerText = `Chatting with: ${target}`;
+        document.getElementById("controls").style.display = "flex";
+        document.getElementById("callControls").style.display = (target === "BOT") ? "none" : "block";
+        
+        const dot = document.getElementById(`dot-${target}`);
+        if(dot) dot.style.display = "none";
+
+        document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+        const activeTab = document.getElementById(`tab-${target}`);
+        if(activeTab) activeTab.classList.add('active');
+
+        renderChat();
+    }
+
+    function renderChat() {
+        const chatBox = document.getElementById("chatBox");
+        chatBox.innerHTML = "";
+        if(!chatHistory[activeTarget]) chatHistory[activeTarget] = [];
+        
+        chatHistory[activeTarget].forEach(m => {
+            const div = document.createElement("div");
+            div.className = `msg ${m.sender === myName ? 'sent' : 'received'}`;
+            div.innerHTML = `<b>${m.sender}:</b><br>${m.content}`;
+            chatBox.appendChild(div);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function sendMessage() {
+        const text = document.getElementById("msgText").value.trim();
+        if(text && activeTarget) {
+            socket.emit('send_message', { sender: myName, target: activeTarget, text: text });
+            saveMessage(activeTarget, myName, text);
+            document.getElementById("msgText").value = "";
+            renderChat();
+        }
+    }
+
+    function saveMessage(chatWith, sender, content) {
+        if(!chatHistory[chatWith]) {
+            chatHistory[chatWith] = [];
+            if(myRole === "agent") updateSidebar(chatWith);
+        }
+        chatHistory[chatWith].push({sender, content});
+        if(chatWith !== activeTarget && myRole === "agent") {
+            const dot = document.getElementById(`dot-${chatWith}`);
+            if(dot) dot.style.display = "block";
+        }
+    }
+
+    function updateSidebar(user) {
+        const list = document.getElementById("userList");
+        if(document.getElementById(`tab-${user}`)) return;
+        const div = document.createElement("div");
+        div.id = `tab-${user}`;
+        div.className = "user-item";
+        div.onclick = () => switchChat(user);
+        div.innerHTML = `👤 ${user} <span class="unread-dot" id="dot-${user}"></span>`;
+        list.appendChild(div);
+    }
+
+    socket.on('receive_message', function(data) {
+        const chatPartner = (data.sender === "BOT" || data.sender === "SYSTEM") ? "BOT" : data.sender;
+        saveMessage(chatPartner, data.sender, data.text);
+        if(chatPartner === activeTarget) renderChat();
+    });
+
+    socket.on('auto_switch_target', function(data) {
+        switchChat(data.agent_name);
+    });
+
+    socket.on('system_msg', function(data) {
+        logToChat(`<span class="system">${data.text}</span>`);
+    });
+
+    // --- UX VOICE NOTES ENHANCED (FIX IPHONE CONSECUTIVE RECORDINGS) ---
+    async function sendVoiceNote() {
+        if(!activeTarget || activeTarget.toUpperCase() === "BOT") {
+            return alert("⚠️ Please wait until you are connected to an agent to send a Voice Note.");
+        }
+
+        const btn = document.querySelector(".btn-voice");
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            
+            // IMPORTANT: Let Safari/Chrome decide their own native format. Do not force!
+            const recorder = new MediaRecorder(stream);
+            const chunks = [];
+            
+            btn.disabled = true;
+            let timeLeft = 5;
+            btn.innerText = `🔴 ${timeLeft}s`;
+
+            const countdown = setInterval(() => {
+                timeLeft--;
+                if(timeLeft > 0) btn.innerText = `🔴 ${timeLeft}s`;
+            }, 1000);
+
+            recorder.ondataavailable = e => {
+                if (e.data && e.data.size > 0) chunks.push(e.data);
+            };
+            
+            recorder.onstop = () => {
+                clearInterval(countdown);
+                btn.innerText = "⏳"; 
+                
+                // Turn off microphone immediately to avoid memory glitches
+                stream.getTracks().forEach(t => t.stop());
+
+                // Check if recording failed or is empty
+                if (chunks.length === 0) {
+                    btn.disabled = false;
+                    btn.innerText = "🎤";
+                    return alert("⚠️ Recording failed. Please try again.");
+                }
+                
+                const blob = new Blob(chunks, { type: recorder.mimeType }); 
+                
+                const reader = new FileReader();
+                reader.readAsDataURL(blob);
+                reader.onloadend = () => {
+                    socket.emit('send_voicenote', { sender: myName, target: activeTarget, audio: reader.result });
+                    saveMessage(activeTarget, myName, `<audio controls src="${reader.result}"></audio>`);
+                    renderChat();
+                    
+                    btn.disabled = false;
+                    btn.innerText = "🎤";
+                }
+            };
+
+            recorder.start();
+            setTimeout(() => {
+                if(recorder.state === "recording") recorder.stop();
+            }, 5000); 
+
+        } catch (err) {
+            alert("⚠️ Please allow microphone access to record a Voice Note.");
+            console.error("Mic Error:", err);
+            btn.disabled = false;
+            btn.innerText = "🎤";
+        }
+    }
+
+    socket.on('receive_voicenote', function(data) {
+        const audioTag = `<audio controls src="${data.audio}"></audio>`;
+        saveMessage(data.sender, data.sender, audioTag);
+        if(data.sender === activeTarget) renderChat();
+    });
+
+    // --- WEBRTC LIVE CALL ---
+    async function setupWebRTC(target) {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+            
+            peerConnection.ontrack = e => document.getElementById("remoteAudio").srcObject = e.streams[0];
+            
+            peerConnection.onicecandidate = e => { 
+                if(e.candidate) socket.emit('ice_candidate', { target, candidate: e.candidate }); 
+            };
+        } catch (err) {
+            console.error("Mic error:", err);
+            logToChat(`<span class="system">⚠️ Error: Microphone access is required.</span>`);
+        }
+    }
+
+    async function processIceQueue() {
+        for (let candidate of iceCandidateQueue) {
+            try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } 
+            catch (e) { console.error(e); }
+        }
+        iceCandidateQueue = []; 
+    }
+
+    async function startLiveCall() {
+        await setupWebRTC(activeTarget);
+        if(!peerConnection) return;
+        
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('call_user', { caller: myName, target: activeTarget, offer });
+        logToChat(`<span class="system">📞 Calling ${activeTarget}...</span>`);
+    }
+
+    function endCall() {
+        cleanupCallState();
+        socket.emit('end_call', { caller: myName, target: activeTarget });
+    }
+
+    function cleanupCallState() {
+        if(peerConnection) { peerConnection.close(); peerConnection = null; }
+        if(localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+        document.getElementById("remoteAudio").srcObject = null;
+        iceCandidateQueue = []; 
+    }
+
+    socket.on('incoming_call', async data => {
+        logToChat(`<span class="system">📞 Incoming call from ${data.caller}...</span>`);
+        if(myRole === "agent") {
+            updateSidebar(data.caller);
+            switchChat(data.caller);
+        }
+        
+        await setupWebRTC(data.caller);
+        if(!peerConnection) return;
+
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        await processIceQueue(); 
+        
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('answer_call', { target: data.caller, answer });
+    });
+
+    socket.on('call_answered', async data => { 
+        if(!peerConnection) return;
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await processIceQueue(); 
+        logToChat(`<span class="system">🟢 Call connected successfully!</span>`);
+    });
+    
+    socket.on('ice_candidate', async data => { 
+        if(peerConnection && peerConnection.remoteDescription) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); 
+        } else {
+            iceCandidateQueue.push(data.candidate);
+        }
+    });
+    
+    socket.on('call_ended', function(data) { 
+        cleanupCallState();
+    });
+
+</script>
+</body>
+</html>
