@@ -22,7 +22,7 @@ def handle_login(data):
         emit('system_msg', {'text': '❌ Username cannot be empty.'}, to=request.sid)
         return
 
-    # Added 'missed_calls' array to track blocked queue attempts
+    # Track tracking states globally and missed calls array
     active_users[username] = {
         'sid': request.sid, 
         'role': role, 
