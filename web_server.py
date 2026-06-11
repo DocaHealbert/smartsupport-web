@@ -44,8 +44,12 @@ def handle_message(data):
     target = data['target'].strip()
     text = data['text']
 
+    # --- ADVANCED BOT FAQ & AUTOMATION LOGIC ---
     if target.upper() == "BOT":
-        if "agent" in text.lower() or "human" in text.lower() or "help" in text.lower():
+        text_lower = text.lower()
+        
+        # 1. Escalation to Human Agent
+        if "agent" in text_lower or "human" in text_lower or "help" in text_lower:
             emit('receive_message', {'sender': 'BOT', 'text': '🤖 Connecting you to a human agent...'}, to=request.sid)
             agent_list = [user for user, info in active_users.items() if info['role'] == 'agent']
             
@@ -56,10 +60,29 @@ def handle_message(data):
                 emit('system_msg', {'text': f'🤖 BOT: You are now connected to {target_agent}. Please change your Target to: {target_agent}'}, to=request.sid)
             else:
                 emit('receive_message', {'sender': 'BOT', 'text': '🤖 Sorry, no agents are currently available. Please try again later.'}, to=request.sid)
+        
+        # 2. FAQ: Operating Hours
+        elif "hour" in text_lower or "time" in text_lower or "open" in text_lower:
+            reply = "🤖 Our operating hours are Monday to Friday, 9:00 AM to 6:00 PM. We are closed on weekends and public holidays."
+            emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
+            
+        # 3. FAQ: Location / Address
+        elif "location" in text_lower or "where" in text_lower or "address" in text_lower:
+            reply = "🤖 We are located at Lot 123, Ground Floor, Jalan Ampang, 50450 Kuala Lumpur, Malaysia."
+            emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
+            
+        # 4. FAQ: Pricing / Service Cost
+        elif "price" in text_lower or "cost" in text_lower or "fee" in text_lower:
+            reply = "🤖 Our basic vehicle inspection fee starts from RM50. Standard servicing ranges from RM150 to RM350 depending on your engine oil package."
+            emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
+            
+        # 5. Default Response for Unhandled Questions
         else:
-            emit('receive_message', {'sender': 'BOT', 'text': '🤖 Please contact us for operating hours or type "agent" to speak with a human mechanic.'}, to=request.sid)
+            reply = "🤖 I am the SmartSupport Assistant. You can ask me about our 'hours', 'location', or 'pricing'. Type 'agent' if you need to speak with a human mechanic."
+            emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
         return
 
+    # --- NORMAL CHAT (CUSTOMER <-> AGENT) ---
     target_info = active_users.get(target)
     if target_info:
         emit('receive_message', {'sender': sender, 'text': text}, to=target_info['sid'])
