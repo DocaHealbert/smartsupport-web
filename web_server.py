@@ -7,6 +7,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'smartsupport_secret'
 socketio = SocketIO(app, max_http_buffer_size=10000000)
 
+# active_users = { username: { 'sid': request.sid, 'role': 'agent', 'in_call': False } }
 active_users = {}
 
 @app.route('/')
@@ -22,7 +23,8 @@ def handle_login(data):
         emit('system_msg', {'text': '❌ Username cannot be empty.'}, to=request.sid)
         return
 
-    active_users[username] = {'sid': request.sid, 'role': role}
+    # Initialize user with 'in_call' status set to False
+    active_users[username] = {'sid': request.sid, 'role': role, 'in_call': False}
     emit('login_response', {'success': True, 'username': username, 'role': role}, to=request.sid)
     print(f"[LOGIN] {username} logged in as {role.upper()}.")
 
@@ -76,9 +78,9 @@ def handle_message(data):
             reply = "🤖 Our basic vehicle inspection fee starts from RM50. Standard servicing ranges from RM150 to RM350 depending on your engine oil package."
             emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
             
-        # 5. Default Response for Unhandled Questions
+        # 5. Default Response
         else:
-            reply = "🤖 I am the SmartSupport Assistant. You can ask me about our 'hours', 'location', or 'pricing'. Type 'agent' if you need to speak with a human mechanic."
+            reply = "🤖 I am the SmartSupport Assistant. You can ask me about our 'hours', 'location', or 'pricing'. Type 'agent' if you need to speak with a human."
             emit('receive_message', {'sender': 'BOT', 'text': reply}, to=request.sid)
         return
 
@@ -104,7 +106,7 @@ def handle_voicenote(data):
     else:
         emit('system_msg', {'text': f'❌ User {target} is offline. Voice Note failed.'}, to=request.sid)
 
-# --- WEBRTC SIGNALING (LIVE CALL) ---
+# --- WEBRTC SIGNALING (LIVE CALL WITH BUSY STATUS) ---
 @socketio.on('call_user')
 def call_user(data):
     caller = data['caller']
@@ -112,8 +114,16 @@ def call_user(data):
     offer = data['offer']
     
     target_info = active_users.get(target)
+    
     if target_info:
-        emit('incoming_call', {'caller': caller, 'offer': offer}, to=target_info['sid'])
+        # Check if the target is already in a call
+        if target_info.get('in_call') == True:
+            emit('system_msg', {'text': f'⚠️ {target} is currently on another call. Please try again later.'}, to=request.sid)
+        else:
+            # Lock both users into 'in_call' status
+            active_users[caller]['in_call'] = True
+            active_users[target]['in_call'] = True
+            emit('incoming_call', {'caller': caller, 'offer': offer}, to=target_info['sid'])
     else:
         emit('system_msg', {'text': f'❌ Call failed. {target} is offline.'}, to=request.sid)
 
@@ -133,6 +143,13 @@ def handle_ice(data):
 def end_call(data):
     caller = data['caller']
     target = data['target']
+    
+    # Release the 'in_call' status for both users
+    if caller in active_users:
+        active_users[caller]['in_call'] = False
+    if target in active_users:
+        active_users[target]['in_call'] = False
+
     target_info = active_users.get(target)
     if target_info:
         emit('call_ended', {'sender': caller}, to=target_info['sid'])
