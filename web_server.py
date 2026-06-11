@@ -39,6 +39,19 @@ def handle_login(data):
     )
     print(f"[LOGIN] {username} telah log masuk sebagai {role.upper()}.")
 
+@socketio.on('disconnect')
+def handle_disconnect():
+    user_to_remove = None
+    # Cari siapa yang putus sambungan berdasarkan ID rahsia mereka (request.sid)
+    for username, info in active_users.items():
+        if info['sid'] == request.sid:
+            user_to_remove = username
+            break
+            
+    # Padam nama mereka dari buku log
+    if user_to_remove:
+        del active_users[user_to_remove]
+        print(f"[DISCONNECT] {user_to_remove} telah keluar dari sistem.")
 
 @socketio.on("send_message")
 def handle_message(data):
