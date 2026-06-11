@@ -30,17 +30,18 @@
         .controls { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
         .controls input { flex-grow: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; }
 
-        button { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; }
+        button { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
         .btn-send { background: var(--primary); }
-        .btn-voice { background: #FF9800; }
+        .btn-voice { background: #FF9800; min-width: 65px; } /* Lebar tetap supaya butang tak mengecut */
         .btn-call { background: #4CAF50; }
         .btn-end { background: #f44336; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
         
         .msg { margin-bottom: 12px; max-width: 80%; padding: 10px; border-radius: 8px; font-size: 14px; }
         .msg.sent { background: #e3f2fd; align-self: flex-end; margin-left: auto; }
         .msg.received { background: #fff; border: 1px solid #ddd; }
         .system { color: #888; font-size: 12px; text-align: center; display: block; margin: 10px 0; }
-        audio { display: block; margin-top: 5px; width: 200px; }
+        audio { display: block; margin-top: 5px; height: 40px; max-width: 220px; outline: none; }
     </style>
 </head>
 <body>
@@ -87,8 +88,6 @@
     let myName = "", myRole = "", activeTarget = "";
     let chatHistory = {}; 
     let localStream, peerConnection;
-    
-    // PENYELESAIAN MASALAH: Barisan menunggu untuk isyarat kelajuan internet yang berbeza
     let iceCandidateQueue = [];
 
     function logToChat(htmlContent) {
@@ -162,7 +161,8 @@
         }
         chatHistory[chatWith].push({sender, content});
         if(chatWith !== activeTarget && myRole === "agent") {
-            document.getElementById(`dot-${chatWith}`).style.display = "block";
+            const dot = document.getElementById(`dot-${chatWith}`);
+            if(dot) dot.style.display = "block";
         }
     }
 
@@ -191,27 +191,54 @@
         logToChat(`<span class="system">${data.text}</span>`);
     });
 
-    // --- VOICE NOTES ---
+    // --- UX VOICE NOTES YANG DITAMBAH BAIK ---
     async function sendVoiceNote() {
+        if(!activeTarget || activeTarget.toUpperCase() === "BOT") {
+            return alert("⚠️ Sila tunggu sehingga anda disambungkan dengan ejen untuk menghantar Voice Note.");
+        }
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream);
             const chunks = [];
+            const btn = document.querySelector(".btn-voice");
+            
+            // Kunci butang dan mulakan visual kiraan masa
+            btn.disabled = true;
+            let timeLeft = 5;
+            btn.innerText = `🔴 ${timeLeft}s`;
+
+            const countdown = setInterval(() => {
+                timeLeft--;
+                if(timeLeft > 0) btn.innerText = `🔴 ${timeLeft}s`;
+            }, 1000);
+
             recorder.ondataavailable = e => chunks.push(e.data);
             recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'audio/webm' });
+                clearInterval(countdown);
+                btn.innerText = "⏳"; // Paparkan ikon menunggu sementara fail diproses
+                
+                // Gunakan Blob tanpa 'audio/webm' supaya serasi di peranti iPhone/Safari
+                const blob = new Blob(chunks); 
                 const reader = new FileReader();
                 reader.readAsDataURL(blob);
                 reader.onloadend = () => {
                     socket.emit('send_voicenote', { sender: myName, target: activeTarget, audio: reader.result });
                     saveMessage(activeTarget, myName, `<audio controls src="${reader.result}"></audio>`);
                     renderChat();
+                    
+                    // Pulihkan butang
+                    btn.disabled = false;
+                    btn.innerText = "🎤";
                 }
+                stream.getTracks().forEach(t => t.stop());
             };
+
             recorder.start();
-            setTimeout(() => recorder.stop(), 3000);
+            setTimeout(() => recorder.stop(), 5000); // Tepat 5 saat dirakam
+
         } catch (err) {
-            alert("Sila benarkan akses mikrofon untuk menghantar Voice Note.");
+            alert("⚠️ Sila benarkan akses mikrofon peranti anda untuk merakam Voice Note.");
         }
     }
 
@@ -221,7 +248,7 @@
         if(data.sender === activeTarget) renderChat();
     });
 
-    // --- WEBRTC LIVE CALL WITH QUEUE FIX ---
+    // --- WEBRTC LIVE CALL ---
     async function setupWebRTC(target) {
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -234,21 +261,17 @@
                 if(e.candidate) socket.emit('ice_candidate', { target, candidate: e.candidate }); 
             };
         } catch (err) {
-            console.error("Gagal mendapat akses mikrofon:", err);
+            console.error("Mic error:", err);
             logToChat(`<span class="system">⚠️ Ralat: Sistem memerlukan akses mikrofon.</span>`);
         }
     }
 
-    // Fungsi untuk memproses isyarat yang tersangkut dalam barisan
     async function processIceQueue() {
         for (let candidate of iceCandidateQueue) {
-            try {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (e) {
-                console.error("Gagal menambah Ice Candidate dari Queue:", e);
-            }
+            try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } 
+            catch (e) { console.error(e); }
         }
-        iceCandidateQueue = []; // Kosongkan barisan selepas siap
+        iceCandidateQueue = []; 
     }
 
     async function startLiveCall() {
@@ -267,16 +290,10 @@
     }
 
     function cleanupCallState() {
-        if(peerConnection) {
-            peerConnection.close();
-            peerConnection = null;
-        }
-        if(localStream) {
-            localStream.getTracks().forEach(t => t.stop());
-            localStream = null;
-        }
+        if(peerConnection) { peerConnection.close(); peerConnection = null; }
+        if(localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
         document.getElementById("remoteAudio").srcObject = null;
-        iceCandidateQueue = []; // Kosongkan memori isyarat
+        iceCandidateQueue = []; 
     }
 
     socket.on('incoming_call', async data => {
@@ -290,7 +307,7 @@
         if(!peerConnection) return;
 
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-        await processIceQueue(); // Aktifkan isyarat tertangguh
+        await processIceQueue(); 
         
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
@@ -300,16 +317,14 @@
     socket.on('call_answered', async data => { 
         if(!peerConnection) return;
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-        await processIceQueue(); // Aktifkan isyarat tertangguh
+        await processIceQueue(); 
         logToChat(`<span class="system">🟢 Call connected successfully!</span>`);
     });
     
     socket.on('ice_candidate', async data => { 
         if(peerConnection && peerConnection.remoteDescription) {
-            // Jika talian dah sedia, masukkan terus
             await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); 
         } else {
-            // Jika talian belum sedia, masukkan dalam ruang menunggu
             iceCandidateQueue.push(data.candidate);
         }
     });
