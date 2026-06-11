@@ -3,247 +3,253 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartSupport - Web Dashboard</title>
+    <title>SmartSupport Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 90vh; }
-        .container { width: 100%; max-width: 700px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 15px rgba(0,0,0,0.1); }
+        :root { --primary: #1565C0; --secondary: #2E7D32; --bg: #f0f2f5; --white: #ffffff; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; height: 100vh; align-items: center; justify-content: center; }
         
-        .login-card { text-align: center; padding: 20px; }
-        .form-group { margin-bottom: 15px; text-align: left; }
-        .form-group label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
-        .form-group input, .form-group select { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; }
+        /* Login Screen */
+        .login-card { background: var(--white); padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; width: 350px; }
+        .login-card input, .login-card select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        .btn-login { width: 100%; padding: 12px; background: var(--secondary); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+
+        /* Main Dashboard Layout */
+        .dashboard { display: none; width: 95%; max-width: 1100px; height: 85vh; background: var(--white); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); overflow: hidden; }
+        .main-wrapper { display: flex; height: 100%; }
+
+        /* Sidebar Style */
+        .sidebar { width: 280px; border-right: 1px solid #ddd; background: #f8f9fa; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; background: var(--primary); color: white; font-weight: bold; }
+        .user-list { flex-grow: 1; overflow-y: auto; }
+        .user-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; transition: 0.2s; position: relative; }
+        .user-item:hover { background: #e9ecef; }
+        .user-item.active { background: #d1e7ff; border-left: 5px solid var(--primary); }
+        .unread-dot { position: absolute; right: 15px; top: 18px; width: 10px; height: 10px; background: red; border-radius: 50%; display: none; }
+
+        /* Chat Area Style */
+        .chat-area { flex-grow: 1; display: flex; flex-direction: column; background: #fff; }
+        .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; background: #fff; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+        .chat-box { flex-grow: 1; padding: 20px; overflow-y: auto; background: #f9f9f9; }
+        .controls { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        .controls input { flex-grow: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; }
+
+        /* Buttons */
+        button { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; }
+        .btn-send { background: var(--primary); }
+        .btn-voice { background: #FF9800; }
+        .btn-call { background: #4CAF50; }
+        .btn-end { background: #f44336; }
         
-        .dashboard { display: none; }
-        .chat-header { padding: 10px; border-radius: 6px; color: white; margin-bottom: 15px; font-weight: bold; text-align: center; }
-        .role-agent { background-color: #2E7D32; }
-        .role-customer { background-color: #1565C0; }
-        
-        .chat-box { height: 350px; border: 1px solid #ddd; background: #fafafa; overflow-y: auto; padding: 12px; margin-bottom: 15px; border-radius: 6px; }
-        .msg { margin-bottom: 10px; padding: 6px; border-bottom: 1px solid #eee; font-size: 15px; }
-        .system { color: #757575; font-style: italic; font-size: 13px; }
-        .incoming { color: #1565C0; font-weight: bold; }
-        .controls { display: flex; gap: 8px; flex-wrap: wrap; }
-        .controls input[type="text"] { flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc; }
-        
-        button { padding: 10px 14px; border-radius: 6px; border: none; font-size: 14px; font-weight: bold; color: white; cursor: pointer; transition: 0.2s; }
-        .btn-login { background-color: #4CAF50; width: 100%; margin-top: 10px; padding: 12px; }
-        .btn-send { background-color: #2196F3; }
-        .btn-voice { background-color: #FF9800; }
-        .btn-call { background-color: #4CAF50; }
-        .btn-end { background-color: #E53935; }
-        button:hover { opacity: 0.9; }
-        audio { display: none; }
-        .voice-audio { display: block; height: 40px; margin-top: 5px; outline: none; }
+        .msg { margin-bottom: 12px; max-width: 80%; padding: 10px; border-radius: 8px; font-size: 14px; }
+        .msg.sent { background: #e3f2fd; align-self: flex-end; margin-left: auto; }
+        .msg.received { background: #fff; border: 1px solid #ddd; }
+        .system { color: #888; font-size: 12px; text-align: center; display: block; margin: 10px 0; }
+        audio { display: block; margin-top: 5px; width: 200px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div id="loginScreen" class="login-card">
-        <h2>SmartSupport Portal 🌐</h2>
-        <p style="color: #666;">Please login to start</p>
-        <div class="form-group">
-            <label>Username:</label>
-            <input type="text" id="usernameInput" placeholder="Enter your name (e.g., Danial)" onkeypress="if(event.key === 'Enter') performLogin()">
-        </div>
-        <div class="form-group">
-            <label>Role:</label>
-            <select id="roleInput">
-                <option value="customer">Customer</option>
-                <option value="agent">Support Agent</option>
-            </select>
-        </div>
-        <button class="btn-login" onclick="performLogin()">Login</button>
-    </div>
-
-    <div id="dashboardScreen" class="dashboard">
-        <div id="headerTag" class="chat-header">Main Menu</div>
-        <div class="chat-box" id="chatBox"></div>
-
-        <div class="controls">
-            <input type="text" id="targetUser" placeholder="Target (e.g., BOT)" style="width: 120px;">
-            <input type="text" id="msgText" placeholder="Type a message..." onkeypress="if(event.key === 'Enter') sendMessage()">
-            <button class="btn-send" onclick="sendMessage()">Send</button>
-            <button class="btn-voice" onclick="sendVoiceNote()">🎤 Voice Note</button>
-            <button class="btn-call" onclick="startLiveCall()">📞 Call</button>
-            <button class="btn-end" onclick="endCall()">📵 End Call</button>
-        </div>
-    </div>
-    <audio id="remoteAudio" autoplay></audio>
+<div id="loginScreen" class="login-card">
+    <h2>SmartSupport Pro 🌐</h2>
+    <input type="text" id="usernameInput" placeholder="Enter Username">
+    <select id="roleInput">
+        <option value="customer">Customer</option>
+        <option value="agent">Agent</option>
+    </select>
+    <button class="btn-login" onclick="performLogin()">Login</button>
 </div>
+
+<div id="dashboardScreen" class="dashboard">
+    <div class="main-wrapper">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">Active Chats</div>
+            <div class="user-list" id="userList">
+                </div>
+        </div>
+        
+        <div class="chat-area">
+            <div class="chat-header">
+                <span id="chatWith">Target: None</span>
+                <div id="callControls" style="display:none;">
+                    <button class="btn-call" onclick="startLiveCall()">📞 Call</button>
+                    <button class="btn-end" onclick="endCall()">📵 End</button>
+                </div>
+            </div>
+            <div class="chat-box" id="chatBox"></div>
+            <div class="controls" id="controls" style="display:none;">
+                <input type="text" id="msgText" placeholder="Type message..." onkeypress="if(event.key==='Enter') sendMessage()">
+                <button class="btn-send" onclick="sendMessage()">Send</button>
+                <button class="btn-voice" onclick="sendVoiceNote()">🎤</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<audio id="remoteAudio" autoplay></audio>
 
 <script>
     const socket = io();
-    let myName = "";
-    let myRole = "";
-    let localStream;
-    let peerConnection;
-    const servers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-
-    function logToChat(htmlContent) {
-        const chatBox = document.getElementById("chatBox");
-        chatBox.innerHTML += `<div class="msg">${htmlContent}</div>`;
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
+    let myName = "", myRole = "", activeTarget = "";
+    let chatHistory = {}; // Format: { 'User1': [msgObj, msgObj], 'User2': [] }
+    let localStream, peerConnection;
 
     function performLogin() {
         const user = document.getElementById("usernameInput").value.trim();
         const role = document.getElementById("roleInput").value;
-        if(!user) return alert("Please enter a Username!");
-        socket.emit('login', { username: user, role: role });
+        if(user) socket.emit('login', { username: user, role: role });
     }
 
     socket.on('login_response', function(data) {
         if(data.success) {
-            myName = data.username;
-            myRole = data.role;
+            myName = data.username; myRole = data.role;
             document.getElementById("loginScreen").style.display = "none";
             document.getElementById("dashboardScreen").style.display = "block";
-            
-            const header = document.getElementById("headerTag");
-            if(myRole === "agent") {
-                header.className = "chat-header role-agent";
-                header.innerText = `🎧 AGENT DASHBOARD: ${myName}`;
-                document.getElementById("targetUser").value = "Customer1";
-            } else {
-                header.className = "chat-header role-customer";
-                header.innerText = `🚗 CUSTOMER DASHBOARD: ${myName}`;
-                document.getElementById("targetUser").value = "BOT";
+            if(myRole === "customer") {
+                document.getElementById("sidebar").style.display = "none";
+                switchChat("BOT");
             }
-            logToChat(`<span class="system">Welcome, you are now connected to the network.</span>`);
         }
     });
 
+    function switchChat(target) {
+        activeTarget = target;
+        document.getElementById("chatWith").innerText = `Chatting with: ${target}`;
+        document.getElementById("controls").style.display = "flex";
+        document.getElementById("callControls").style.display = (target === "BOT") ? "none" : "block";
+        
+        // Mark as read in sidebar
+        const dot = document.getElementById(`dot-${target}`);
+        if(dot) dot.style.display = "none";
+
+        // Highlight active tab
+        document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+        const activeTab = document.getElementById(`tab-${target}`);
+        if(activeTab) activeTab.classList.add('active');
+
+        renderChat();
+    }
+
+    function renderChat() {
+        const chatBox = document.getElementById("chatBox");
+        chatBox.innerHTML = "";
+        if(!chatHistory[activeTarget]) chatHistory[activeTarget] = [];
+        
+        chatHistory[activeTarget].forEach(m => {
+            const div = document.createElement("div");
+            div.className = `msg ${m.sender === myName ? 'sent' : 'received'}`;
+            div.innerHTML = `<b>${m.sender}:</b><br>${m.content}`;
+            chatBox.appendChild(div);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
     function sendMessage() {
-        const target = document.getElementById("targetUser").value.trim();
         const text = document.getElementById("msgText").value.trim();
-        if(myName && target && text) {
-            socket.emit('send_message', { sender: myName, target: target, text: text });
-            logToChat(`<b>[Me -> ${target}]:</b> ${text}`);
-            document.getElementById("msgText").value = ""; 
+        if(text && activeTarget) {
+            socket.emit('send_message', { sender: myName, target: activeTarget, text: text });
+            saveMessage(activeTarget, myName, text);
+            document.getElementById("msgText").value = "";
+            renderChat();
         }
     }
 
-    // --- VOICE NOTE FUNCTION ---
-    async function sendVoiceNote() {
-        const target = document.getElementById("targetUser").value.trim();
-        if(!target || target.toUpperCase() === "BOT") return alert("Please specify a valid human target for Voice Notes.");
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-            const audioChunks = [];
-
-            mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                const reader = new FileReader();
-                reader.readAsDataURL(audioBlob);
-                reader.onloadend = () => {
-                    socket.emit('send_voicenote', { sender: myName, target: target, audio: reader.result });
-                }
-                stream.getTracks().forEach(track => track.stop());
-            };
-
-            mediaRecorder.start();
-            logToChat(`<span class="system">🔴 Recording (5s)... Speak now!</span>`);
-            setTimeout(() => {
-                mediaRecorder.stop();
-                logToChat(`<span class="system">⏳ Recording finished. Sending...</span>`);
-            }, 5000);
-        } catch (err) {
-            alert("Microphone Error: Please allow microphone access. " + err);
+    function saveMessage(chatWith, sender, content) {
+        if(!chatHistory[chatWith]) {
+            chatHistory[chatWith] = [];
+            if(myRole === "agent") updateSidebar(chatWith);
         }
+        chatHistory[chatWith].push({sender, content});
+        if(chatWith !== activeTarget && myRole === "agent") {
+            document.getElementById(`dot-${chatWith}`).style.display = "block";
+        }
+    }
+
+    function updateSidebar(user) {
+        const list = document.getElementById("userList");
+        if(document.getElementById(`tab-${user}`)) return;
+        const div = document.createElement("div");
+        div.id = `tab-${user}`;
+        div.className = "user-item";
+        div.onclick = () => switchChat(user);
+        div.innerHTML = `👤 ${user} <span class="unread-dot" id="dot-${user}"></span>`;
+        list.appendChild(div);
+    }
+
+    socket.on('receive_message', function(data) {
+        const chatPartner = (data.sender === "BOT" || data.sender === "SYSTEM") ? "BOT" : data.sender;
+        saveMessage(chatPartner, data.sender, data.text);
+        if(chatPartner === activeTarget) renderChat();
+    });
+
+    socket.on('auto_switch_target', function(data) {
+        switchChat(data.agent_name);
+    });
+
+    socket.on('system_msg', function(data) {
+        const chatBox = document.getElementById("chatBox");
+        chatBox.innerHTML += `<span class="system">${data.text}</span>`;
+    });
+
+    // --- VOICE NOTES ---
+    async function sendVoiceNote() {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'audio/webm' });
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+                socket.emit('send_voicenote', { sender: myName, target: activeTarget, audio: reader.result });
+                saveMessage(activeTarget, myName, `<audio controls src="${reader.result}"></audio>`);
+                renderChat();
+            }
+        };
+        recorder.start();
+        setTimeout(() => recorder.stop(), 3000);
     }
 
     socket.on('receive_voicenote', function(data) {
-        const audioHtml = `<br><audio class="voice-audio" controls src="${data.audio}"></audio>`;
-        logToChat(`<span class="incoming">🎵 [Voice Note from ${data.sender}]:</span> ${audioHtml}`);
+        const audioTag = `<audio controls src="${data.audio}"></audio>`;
+        saveMessage(data.sender, data.sender, audioTag);
+        if(data.sender === activeTarget) renderChat();
     });
 
-    // --- WEBRTC LIVE CALL ENGINE ---
+    // --- WebRTC LIVE CALL ---
     async function setupWebRTC(target) {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        peerConnection = new RTCPeerConnection(servers);
-        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-        
-        peerConnection.ontrack = event => {
-            document.getElementById("remoteAudio").srcObject = event.streams[0];
-        };
-        
-        peerConnection.onicecandidate = event => {
-            if (event.candidate) {
-                socket.emit('ice_candidate', { target: target, candidate: event.candidate });
-            }
-        };
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+        peerConnection.ontrack = e => document.getElementById("remoteAudio").srcObject = e.streams[0];
+        peerConnection.onicecandidate = e => { if(e.candidate) socket.emit('ice_candidate', { target, candidate: e.candidate }); };
     }
 
     async function startLiveCall() {
-        const target = document.getElementById("targetUser").value.trim();
-        if(!target || target.toUpperCase() === "BOT") return alert("Please specify a human target to call.");
-        
-        await setupWebRTC(target);
+        await setupWebRTC(activeTarget);
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
-        socket.emit('call_user', { caller: myName, target: target, offer: offer });
-        logToChat(`<span class="system">📞 Calling ${target}...</span>`);
+        socket.emit('call_user', { caller: myName, target: activeTarget, offer });
     }
 
     function endCall() {
-        const target = document.getElementById("targetUser").value.trim();
-        if (peerConnection) {
-            peerConnection.close();
-            peerConnection = null;
-        }
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-            localStream = null;
-        }
-        socket.emit('end_call', { caller: myName, target: target });
-        logToChat(`<span class="system">📵 You ended the call.</span>`);
+        if(peerConnection) peerConnection.close();
+        socket.emit('end_call', { caller: myName, target: activeTarget });
     }
 
-    socket.on('incoming_call', async function(data) {
-        logToChat(`<span class="incoming">📞 Incoming call from ${data.caller}. Connecting automatically...</span>`);
+    socket.on('incoming_call', async data => {
         await setupWebRTC(data.caller);
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
-        socket.emit('answer_call', { target: data.caller, answer: answer });
+        socket.emit('answer_call', { target: data.caller, answer });
     });
 
-    socket.on('call_answered', async function(data) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-        logToChat(`<span class="system">🟢 Call connected! You can now speak.</span>`);
-    });
+    socket.on('call_answered', async data => { await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer)); });
+    socket.on('ice_candidate', async data => { if(peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); });
+    socket.on('call_ended', () => { if(peerConnection) peerConnection.close(); });
 
-    socket.on('ice_candidate', async function(data) {
-        if(peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-    });
-
-    socket.on('call_ended', function(data) {
-        if (peerConnection) {
-            peerConnection.close();
-            peerConnection = null;
-        }
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-            localStream = null;
-        }
-        logToChat(`<span class="system">📵 Call was ended by ${data.sender}.</span>`);
-    });
-
-    // --- SYSTEM & MESSAGES ---
-    socket.on('system_msg', function(data) { logToChat(`<span class="system">${data.text}</span>`); });
-    socket.on('receive_message', function(data) { logToChat(`<span class="incoming">[${data.sender}]:</span> ${data.text}`); });
-    
-    // --- AUTO-SWITCH TARGET SYSTEM ---
-    socket.on('auto_switch_target', function(data) {
-        document.getElementById("targetUser").value = data.agent_name;
-        logToChat(`<span class="system">🔄 Auto-Target activated: Your messages will now be sent directly to ${data.agent_name}.</span>`);
-    });
 </script>
-
 </body>
 </html>
