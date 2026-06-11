@@ -32,7 +32,7 @@
 
         button { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
         .btn-send { background: var(--primary); }
-        .btn-voice { background: #FF9800; min-width: 65px; } /* Lebar tetap supaya butang tak mengecut */
+        .btn-voice { background: #FF9800; min-width: 65px; } 
         .btn-call { background: #4CAF50; }
         .btn-end { background: #f44336; }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -191,7 +191,7 @@
         logToChat(`<span class="system">${data.text}</span>`);
     });
 
-    // --- UX VOICE NOTES YANG DITAMBAH BAIK ---
+    // --- UX VOICE NOTES YANG DITAMBAH BAIK (FIX IPHONE/SAFARI) ---
     async function sendVoiceNote() {
         if(!activeTarget || activeTarget.toUpperCase() === "BOT") {
             return alert("⚠️ Sila tunggu sehingga anda disambungkan dengan ejen untuk menghantar Voice Note.");
@@ -199,7 +199,16 @@
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const recorder = new MediaRecorder(stream);
+            
+            // Pengesanan automatik format peranti
+            let options = {};
+            if (MediaRecorder.isTypeSupported('audio/webm')) {
+                options = { mimeType: 'audio/webm' }; 
+            } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                options = { mimeType: 'audio/mp4' };  
+            }
+
+            const recorder = new MediaRecorder(stream, options);
             const chunks = [];
             const btn = document.querySelector(".btn-voice");
             
@@ -213,13 +222,18 @@
                 if(timeLeft > 0) btn.innerText = `🔴 ${timeLeft}s`;
             }, 1000);
 
-            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.ondataavailable = e => {
+                if (e.data.size > 0) chunks.push(e.data);
+            };
+            
             recorder.onstop = () => {
                 clearInterval(countdown);
-                btn.innerText = "⏳"; // Paparkan ikon menunggu sementara fail diproses
+                btn.innerText = "⏳"; 
                 
-                // Gunakan Blob tanpa 'audio/webm' supaya serasi di peranti iPhone/Safari
-                const blob = new Blob(chunks); 
+                // Bina fail audio dengan jenis format (mimeType) yang betul
+                const finalMimeType = recorder.mimeType || 'audio/mp4';
+                const blob = new Blob(chunks, { type: finalMimeType }); 
+                
                 const reader = new FileReader();
                 reader.readAsDataURL(blob);
                 reader.onloadend = () => {
@@ -235,10 +249,11 @@
             };
 
             recorder.start();
-            setTimeout(() => recorder.stop(), 5000); // Tepat 5 saat dirakam
+            setTimeout(() => recorder.stop(), 5000); // Rakaman 5 saat
 
         } catch (err) {
             alert("⚠️ Sila benarkan akses mikrofon peranti anda untuk merakam Voice Note.");
+            console.error("Mic Error:", err);
         }
     }
 
