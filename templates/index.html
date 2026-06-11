@@ -87,6 +87,9 @@
     let myName = "", myRole = "", activeTarget = "";
     let chatHistory = {}; 
     let localStream, peerConnection;
+    
+    // PENYELESAIAN MASALAH: Barisan menunggu untuk isyarat kelajuan internet yang berbeza
+    let iceCandidateQueue = [];
 
     function logToChat(htmlContent) {
         const chatBox = document.getElementById("chatBox");
@@ -190,22 +193,26 @@
 
     // --- VOICE NOTES ---
     async function sendVoiceNote() {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream);
-        const chunks = [];
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'audio/webm' });
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => {
-                socket.emit('send_voicenote', { sender: myName, target: activeTarget, audio: reader.result });
-                saveMessage(activeTarget, myName, `<audio controls src="${reader.result}"></audio>`);
-                renderChat();
-            }
-        };
-        recorder.start();
-        setTimeout(() => recorder.stop(), 3000);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.readAsDataURL(blob);
+                reader.onloadend = () => {
+                    socket.emit('send_voicenote', { sender: myName, target: activeTarget, audio: reader.result });
+                    saveMessage(activeTarget, myName, `<audio controls src="${reader.result}"></audio>`);
+                    renderChat();
+                }
+            };
+            recorder.start();
+            setTimeout(() => recorder.stop(), 3000);
+        } catch (err) {
+            alert("Sila benarkan akses mikrofon untuk menghantar Voice Note.");
+        }
     }
 
     socket.on('receive_voicenote', function(data) {
@@ -214,17 +221,40 @@
         if(data.sender === activeTarget) renderChat();
     });
 
-    // --- WebRTC LIVE CALL WITH AUTO TRACK CLEANUP ---
+    // --- WEBRTC LIVE CALL WITH QUEUE FIX ---
     async function setupWebRTC(target) {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-        localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-        peerConnection.ontrack = e => document.getElementById("remoteAudio").srcObject = e.streams[0];
-        peerConnection.onicecandidate = e => { if(e.candidate) socket.emit('ice_candidate', { target, candidate: e.candidate }); };
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+            
+            peerConnection.ontrack = e => document.getElementById("remoteAudio").srcObject = e.streams[0];
+            
+            peerConnection.onicecandidate = e => { 
+                if(e.candidate) socket.emit('ice_candidate', { target, candidate: e.candidate }); 
+            };
+        } catch (err) {
+            console.error("Gagal mendapat akses mikrofon:", err);
+            logToChat(`<span class="system">⚠️ Ralat: Sistem memerlukan akses mikrofon.</span>`);
+        }
+    }
+
+    // Fungsi untuk memproses isyarat yang tersangkut dalam barisan
+    async function processIceQueue() {
+        for (let candidate of iceCandidateQueue) {
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+                console.error("Gagal menambah Ice Candidate dari Queue:", e);
+            }
+        }
+        iceCandidateQueue = []; // Kosongkan barisan selepas siap
     }
 
     async function startLiveCall() {
         await setupWebRTC(activeTarget);
+        if(!peerConnection) return;
+        
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         socket.emit('call_user', { caller: myName, target: activeTarget, offer });
@@ -246,29 +276,42 @@
             localStream = null;
         }
         document.getElementById("remoteAudio").srcObject = null;
+        iceCandidateQueue = []; // Kosongkan memori isyarat
     }
 
     socket.on('incoming_call', async data => {
         logToChat(`<span class="system">📞 Incoming call from ${data.caller}...</span>`);
-        // Force UI switch for agent to sync targets correctly
         if(myRole === "agent") {
             updateSidebar(data.caller);
             switchChat(data.caller);
         }
+        
         await setupWebRTC(data.caller);
+        if(!peerConnection) return;
+
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        await processIceQueue(); // Aktifkan isyarat tertangguh
+        
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
         socket.emit('answer_call', { target: data.caller, answer });
     });
 
     socket.on('call_answered', async data => { 
+        if(!peerConnection) return;
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await processIceQueue(); // Aktifkan isyarat tertangguh
         logToChat(`<span class="system">🟢 Call connected successfully!</span>`);
     });
     
     socket.on('ice_candidate', async data => { 
-        if(peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); 
+        if(peerConnection && peerConnection.remoteDescription) {
+            // Jika talian dah sedia, masukkan terus
+            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); 
+        } else {
+            // Jika talian belum sedia, masukkan dalam ruang menunggu
+            iceCandidateQueue.push(data.candidate);
+        }
     });
     
     socket.on('call_ended', function(data) { 
