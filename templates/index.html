@@ -191,28 +191,21 @@
         logToChat(`<span class="system">${data.text}</span>`);
     });
 
-    // --- UX VOICE NOTES YANG DITAMBAH BAIK (FIX IPHONE/SAFARI) ---
+    // --- UX VOICE NOTES ENHANCED (FIX IPHONE CONSECUTIVE RECORDINGS) ---
     async function sendVoiceNote() {
         if(!activeTarget || activeTarget.toUpperCase() === "BOT") {
-            return alert("⚠️ Sila tunggu sehingga anda disambungkan dengan ejen untuk menghantar Voice Note.");
+            return alert("⚠️ Please wait until you are connected to an agent to send a Voice Note.");
         }
+
+        const btn = document.querySelector(".btn-voice");
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
-            // Pengesanan automatik format peranti
-            let options = {};
-            if (MediaRecorder.isTypeSupported('audio/webm')) {
-                options = { mimeType: 'audio/webm' }; 
-            } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                options = { mimeType: 'audio/mp4' };  
-            }
-
-            const recorder = new MediaRecorder(stream, options);
+            // IMPORTANT: Let Safari/Chrome decide their own native format. Do not force!
+            const recorder = new MediaRecorder(stream);
             const chunks = [];
-            const btn = document.querySelector(".btn-voice");
             
-            // Kunci butang dan mulakan visual kiraan masa
             btn.disabled = true;
             let timeLeft = 5;
             btn.innerText = `🔴 ${timeLeft}s`;
@@ -223,16 +216,24 @@
             }, 1000);
 
             recorder.ondataavailable = e => {
-                if (e.data.size > 0) chunks.push(e.data);
+                if (e.data && e.data.size > 0) chunks.push(e.data);
             };
             
             recorder.onstop = () => {
                 clearInterval(countdown);
                 btn.innerText = "⏳"; 
                 
-                // Bina fail audio dengan jenis format (mimeType) yang betul
-                const finalMimeType = recorder.mimeType || 'audio/mp4';
-                const blob = new Blob(chunks, { type: finalMimeType }); 
+                // Turn off microphone immediately to avoid memory glitches
+                stream.getTracks().forEach(t => t.stop());
+
+                // Check if recording failed or is empty
+                if (chunks.length === 0) {
+                    btn.disabled = false;
+                    btn.innerText = "🎤";
+                    return alert("⚠️ Recording failed. Please try again.");
+                }
+                
+                const blob = new Blob(chunks, { type: recorder.mimeType }); 
                 
                 const reader = new FileReader();
                 reader.readAsDataURL(blob);
@@ -241,19 +242,21 @@
                     saveMessage(activeTarget, myName, `<audio controls src="${reader.result}"></audio>`);
                     renderChat();
                     
-                    // Pulihkan butang
                     btn.disabled = false;
                     btn.innerText = "🎤";
                 }
-                stream.getTracks().forEach(t => t.stop());
             };
 
             recorder.start();
-            setTimeout(() => recorder.stop(), 5000); // Rakaman 5 saat
+            setTimeout(() => {
+                if(recorder.state === "recording") recorder.stop();
+            }, 5000); 
 
         } catch (err) {
-            alert("⚠️ Sila benarkan akses mikrofon peranti anda untuk merakam Voice Note.");
+            alert("⚠️ Please allow microphone access to record a Voice Note.");
             console.error("Mic Error:", err);
+            btn.disabled = false;
+            btn.innerText = "🎤";
         }
     }
 
@@ -277,7 +280,7 @@
             };
         } catch (err) {
             console.error("Mic error:", err);
-            logToChat(`<span class="system">⚠️ Ralat: Sistem memerlukan akses mikrofon.</span>`);
+            logToChat(`<span class="system">⚠️ Error: Microphone access is required.</span>`);
         }
     }
 
