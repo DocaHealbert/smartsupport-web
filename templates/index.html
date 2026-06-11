@@ -9,16 +9,13 @@
         :root { --primary: #1565C0; --secondary: #2E7D32; --bg: #f0f2f5; --white: #ffffff; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; height: 100vh; align-items: center; justify-content: center; }
         
-        /* Login Screen */
         .login-card { background: var(--white); padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; width: 350px; }
         .login-card input, .login-card select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
         .btn-login { width: 100%; padding: 12px; background: var(--secondary); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
 
-        /* Main Dashboard Layout */
         .dashboard { display: none; width: 95%; max-width: 1100px; height: 85vh; background: var(--white); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); overflow: hidden; }
         .main-wrapper { display: flex; height: 100%; }
 
-        /* Sidebar Style */
         .sidebar { width: 280px; border-right: 1px solid #ddd; background: #f8f9fa; display: flex; flex-direction: column; }
         .sidebar-header { padding: 20px; background: var(--primary); color: white; font-weight: bold; }
         .user-list { flex-grow: 1; overflow-y: auto; }
@@ -27,14 +24,12 @@
         .user-item.active { background: #d1e7ff; border-left: 5px solid var(--primary); }
         .unread-dot { position: absolute; right: 15px; top: 18px; width: 10px; height: 10px; background: red; border-radius: 50%; display: none; }
 
-        /* Chat Area Style */
         .chat-area { flex-grow: 1; display: flex; flex-direction: column; background: #fff; }
         .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; background: #fff; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
         .chat-box { flex-grow: 1; padding: 20px; overflow-y: auto; background: #f9f9f9; }
         .controls { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
         .controls input { flex-grow: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; }
 
-        /* Buttons */
         button { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; }
         .btn-send { background: var(--primary); }
         .btn-voice { background: #FF9800; }
@@ -64,16 +59,15 @@
     <div class="main-wrapper">
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">Active Chats</div>
-            <div class="user-list" id="userList">
-                </div>
+            <div class="user-list" id="userList"></div>
         </div>
         
         <div class="chat-area">
             <div class="chat-header">
                 <span id="chatWith">Target: None</span>
                 <div id="callControls" style="display:none;">
-                    <button class="btn-call" onclick="startLiveCall()">📞 Call</button>
-                    <button class="btn-end" onclick="endCall()">📵 End</button>
+                    <button class="btn-call" id="callBtn" onclick="startLiveCall()">📞 Call</button>
+                    <button class="btn-end" id="endBtn" onclick="endCall()">📵 End</button>
                 </div>
             </div>
             <div class="chat-box" id="chatBox"></div>
@@ -91,8 +85,14 @@
 <script>
     const socket = io();
     let myName = "", myRole = "", activeTarget = "";
-    let chatHistory = {}; // Format: { 'User1': [msgObj, msgObj], 'User2': [] }
+    let chatHistory = {}; 
     let localStream, peerConnection;
+
+    function logToChat(htmlContent) {
+        const chatBox = document.getElementById("chatBox");
+        chatBox.innerHTML += htmlContent;
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
 
     function performLogin() {
         const user = document.getElementById("usernameInput").value.trim();
@@ -118,11 +118,9 @@
         document.getElementById("controls").style.display = "flex";
         document.getElementById("callControls").style.display = (target === "BOT") ? "none" : "block";
         
-        // Mark as read in sidebar
         const dot = document.getElementById(`dot-${target}`);
         if(dot) dot.style.display = "none";
 
-        // Highlight active tab
         document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
         const activeTab = document.getElementById(`tab-${target}`);
         if(activeTab) activeTab.classList.add('active');
@@ -187,8 +185,7 @@
     });
 
     socket.on('system_msg', function(data) {
-        const chatBox = document.getElementById("chatBox");
-        chatBox.innerHTML += `<span class="system">${data.text}</span>`;
+        logToChat(`<span class="system">${data.text}</span>`);
     });
 
     // --- VOICE NOTES ---
@@ -217,7 +214,7 @@
         if(data.sender === activeTarget) renderChat();
     });
 
-    // --- WebRTC LIVE CALL ---
+    // --- WebRTC LIVE CALL WITH AUTO TRACK CLEANUP ---
     async function setupWebRTC(target) {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
@@ -231,14 +228,33 @@
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         socket.emit('call_user', { caller: myName, target: activeTarget, offer });
+        logToChat(`<span class="system">📞 Calling ${activeTarget}...</span>`);
     }
 
     function endCall() {
-        if(peerConnection) peerConnection.close();
+        cleanupCallState();
         socket.emit('end_call', { caller: myName, target: activeTarget });
     }
 
+    function cleanupCallState() {
+        if(peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        if(localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+            localStream = null;
+        }
+        document.getElementById("remoteAudio").srcObject = null;
+    }
+
     socket.on('incoming_call', async data => {
+        logToChat(`<span class="system">📞 Incoming call from ${data.caller}...</span>`);
+        // Force UI switch for agent to sync targets correctly
+        if(myRole === "agent") {
+            updateSidebar(data.caller);
+            switchChat(data.caller);
+        }
         await setupWebRTC(data.caller);
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await peerConnection.createAnswer();
@@ -246,9 +262,18 @@
         socket.emit('answer_call', { target: data.caller, answer });
     });
 
-    socket.on('call_answered', async data => { await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer)); });
-    socket.on('ice_candidate', async data => { if(peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); });
-    socket.on('call_ended', () => { if(peerConnection) peerConnection.close(); });
+    socket.on('call_answered', async data => { 
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        logToChat(`<span class="system">🟢 Call connected successfully!</span>`);
+    });
+    
+    socket.on('ice_candidate', async data => { 
+        if(peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); 
+    });
+    
+    socket.on('call_ended', function(data) { 
+        cleanupCallState();
+    });
 
 </script>
 </body>
